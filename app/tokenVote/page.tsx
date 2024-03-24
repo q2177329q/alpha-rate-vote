@@ -18,30 +18,31 @@ import {
   useFramesReducer,
   validateActionSignature,
 } from "frames.js/next/server";
+import { farVote } from "../../common/api";
 import {
   getFarcasterTokens,
   getTokenDetail,
   getTokenAlpha,
   checkFarVote,
-  farVote,
-} from "../../common/api";
-
+  getGraphData,
+  setGraphData,
+} from "./cache/index";
 import { getDataFromAllSettled } from "../../common/utils";
 import { createGraph } from "./createGraph";
 
 type State = {
   step: number;
   hasGetFarcasterTokensDataError: boolean;
+  hasBindPond: boolean;
   hasVote: boolean;
   pushTime: number | string;
-  hasBindPond: boolean;
 };
 type FarcasterTokenItem = {
-  tokenName?: string;
+  tokenName: string;
   address: string;
   pushReason: string;
   pushTime: number | string;
-  tokenSymbol?: string;
+  tokenSymbol: string;
 };
 
 const reducer: FrameReducer<State> = (state, action) => {
@@ -81,9 +82,9 @@ export default async function Home({
   const initialState: State = {
     step: 0,
     hasGetFarcasterTokensDataError,
+    hasBindPond,
     hasVote,
     pushTime: searchParams?.pushTime as string,
-    hasBindPond,
   };
 
   const buttonIndex = previousFrame?.postBody?.untrustedData?.buttonIndex || -1;
@@ -97,8 +98,8 @@ export default async function Home({
   let farcasterTokensData: FarcasterTokenItem[] = [];
 
   const farcasterTokens = await getFarcasterTokens(nextState?.pushTime);
-  if (farcasterTokens?.data?.data?.length > 0) {
-    farcasterTokensData = farcasterTokens?.data?.data;
+  if (farcasterTokens?.length > 0) {
+    farcasterTokensData = farcasterTokens;
   }
   let imgSrc = "";
 
@@ -128,7 +129,7 @@ export default async function Home({
         return [];
       });
       const mapFunction = (data) => {
-        return data.value?.data?.data;
+        return data.value;
       };
       tokenDetailData1 = getDataFromAllSettled(
         tokenDetailResp1,
@@ -170,11 +171,16 @@ export default async function Home({
     farcasterTokensData[0].tokenSymbol = tokenDetailData1.tokenSymbol;
     farcasterTokensData[1].tokenSymbol = tokenDetailData2.tokenSymbol;
     farcasterTokensData[2].tokenSymbol = tokenDetailData3.tokenSymbol;
-
-    imgSrc = createGraph(
-      [tokenAlphaData1?.week, tokenAlphaData2?.week, tokenAlphaData3?.week],
-      colorList
-    );
+    const cacheImgSrc = await getGraphData(nextState?.pushTime);
+    if (cacheImgSrc) {
+      imgSrc = cacheImgSrc;
+    } else {
+      imgSrc = createGraph(
+        [tokenAlphaData1?.week, tokenAlphaData2?.week, tokenAlphaData3?.week],
+        colorList
+      );
+      setGraphData(nextState?.pushTime, imgSrc);
+    }
   } else {
     console.log("error in parse token detail data");
     hasGetFarcasterTokensDataError = true;
