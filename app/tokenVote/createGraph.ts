@@ -113,6 +113,11 @@ export const createGraph = (dataList: any[], colorList: string[]) => {
       mode: "width",
       value: 2160,
     },
+    font: {
+      fontFiles: [path.join(process.cwd(), "public/microsoft.ttf")], // Load custom fonts.
+      loadSystemFonts: false, // It will be faster to disable loading system fonts.
+      defaultFontFamily: "Microsoft Yahei", // You can omit this.
+    },
     logLevel: "debug",
   };
   // @ts-ignore

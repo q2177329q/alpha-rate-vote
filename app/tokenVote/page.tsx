@@ -22,15 +22,19 @@ import {
   getFarcasterTokens,
   getTokenDetail,
   getTokenAlpha,
+  checkFarVote,
+  farVote,
 } from "../../common/api";
 
-import { createGraph } from "./createGraph";
 import { getDataFromAllSettled } from "../../common/utils";
+import { createGraph } from "./createGraph";
 
 type State = {
   step: number;
   hasGetFarcasterTokensDataError: boolean;
+  hasVote: boolean;
   pushTime: number | string;
+  hasBindPond: boolean;
 };
 type FarcasterTokenItem = {
   tokenName?: string;
@@ -52,8 +56,13 @@ export default async function Home({
   params,
   searchParams,
 }: NextServerPageProps) {
+  const colorUp = "#3FC753";
+  const colorPrimary = "#f75";
   const previousFrame = getPreviousFrame<State>(searchParams);
+  // await validateActionSignature(previousFrame.postBody);
   const frameMessage = await getFrameMessage(previousFrame.postBody);
+
+  // const validMessage = await validateActionSignature(previousFrame.postBody);
 
   let tokenDetailData1: any = {};
   let tokenDetailData2: any = {};
@@ -62,6 +71,8 @@ export default async function Home({
   let tokenAlphaData2: any = {};
   let tokenAlphaData3: any = {};
   let hasGetFarcasterTokensDataError = false;
+  let hasBindPond = true;
+  let hasVote = false;
 
   // console.log("===validMessage", validMessage);
   console.log("===frameMessage", frameMessage);
@@ -70,7 +81,9 @@ export default async function Home({
   const initialState: State = {
     step: 0,
     hasGetFarcasterTokensDataError,
+    hasVote,
     pushTime: searchParams?.pushTime as string,
+    hasBindPond,
   };
 
   const buttonIndex = previousFrame?.postBody?.untrustedData?.buttonIndex || -1;
@@ -168,7 +181,73 @@ export default async function Home({
   }
   // 进入frame
   if (!previousFrame.postBody || prevState?.hasGetFarcasterTokensDataError) {
+    // const hasBindPondRes = await getHasBind();
+    // if (hasBindPondRes.data.success) {
+    //   nextState.hasBindPond = hasBindPondRes.data.data;
+    // }
+    const hasVoteRes = await checkFarVote(
+      frameMessage?.castId?.fid,
+      nextState?.pushTime
+    );
+    if (hasVoteRes) {
+      nextState.hasVote = hasVoteRes;
+      if (nextState.hasVote) {
+        nextState.step = 1;
+      }
+    }
   } else {
+    // vote token
+    if (prevState?.step === 0 && buttonIndex > 0) {
+      console.log(
+        "====farcasterTokensData.length",
+        farcasterTokensData.length,
+        buttonIndex
+      );
+      if (farcasterTokensData.length >= buttonIndex) {
+        const tokenAddress = farcasterTokensData[buttonIndex - 1]?.address;
+        const _checkFarVote = await checkFarVote(
+          frameMessage?.castId?.fid,
+          nextState?.pushTime as string
+        );
+        let farVoteResp: any = {};
+        if (!_checkFarVote) {
+          farVoteResp = await farVote({
+            fid: frameMessage?.castId?.fid,
+            address: tokenAddress,
+            pushtime: nextState?.pushTime as string,
+          }).catch((e) => e);
+          console.log(
+            "===vote token",
+            buttonIndex,
+            farcasterTokensData[buttonIndex - 1]?.tokenName
+          );
+          console.log(
+            "===farVoteResp",
+            frameMessage?.castId?.fid,
+            tokenAddress,
+            nextState?.pushTime,
+            farVoteResp?.data
+          );
+        } else {
+          console.log("has vote===");
+        }
+        if (
+          _checkFarVote ||
+          farVoteResp?.data?.data?.[tokenAddress] !== undefined
+        ) {
+          nextState.step = 1;
+          nextState.hasVote = true;
+        } else {
+          console.log("error in vote token check or request");
+          hasGetFarcasterTokensDataError = true;
+          nextState.hasGetFarcasterTokensDataError = true;
+        }
+      } else {
+        console.log("error in vote button click");
+        hasGetFarcasterTokensDataError = true;
+        nextState.hasGetFarcasterTokensDataError = true;
+      }
+    }
   }
 
   // hasGetFarcasterTokensDataError = Math.random() > 0.5;
@@ -247,6 +326,21 @@ export default async function Home({
               <div>Potential alpha rate calculated by Pond</div>
             </div>
           ) : null}
+          {!hasGetFarcasterTokensDataError &&
+          nextState.step === 1 &&
+          nextState.hasBindPond ? (
+            <div style={{ padding: "200px" }}>
+              Great!!! You will get points if you catch the highest one!!🚀🚀🚀
+            </div>
+          ) : null}
+          {!hasGetFarcasterTokensDataError &&
+          nextState.step === 1 &&
+          !nextState.hasBindPond ? (
+            <div style={{ padding: "200px" }}>
+              Great!!! You will get points if you catch the highest one and
+              register Pond!!🚀🚀🚀
+            </div>
+          ) : null}
         </FrameImage>
 
         {/* button */}
@@ -274,6 +368,60 @@ export default async function Home({
             {(tokenDetailData3.tokenName || "").length > 10
               ? tokenDetailData3.tokenSymbol
               : tokenDetailData3.tokenName}
+          </FrameButton>
+        ) : null}
+
+        {/* step2 && bind Pond */}
+        {!hasGetFarcasterTokensDataError &&
+        nextState.hasBindPond &&
+        nextState.step === 1 ? (
+          <FrameButton
+            action="link"
+            target={
+              "https://cryptopond.xyz/token_discovery/detail/" +
+              farcasterTokensData[0]?.address
+            }
+          >
+            {(tokenDetailData1.tokenName || "").length > 10
+              ? tokenDetailData1.tokenSymbol
+              : tokenDetailData1.tokenName}
+          </FrameButton>
+        ) : null}
+        {!hasGetFarcasterTokensDataError &&
+        nextState.hasBindPond &&
+        nextState.step === 1 ? (
+          <FrameButton
+            action="link"
+            target={
+              "https://cryptopond.xyz/token_discovery/detail/" +
+              farcasterTokensData[1]?.address
+            }
+          >
+            {(tokenDetailData2.tokenName || "").length > 10
+              ? tokenDetailData2.tokenSymbol
+              : tokenDetailData2.tokenName}
+          </FrameButton>
+        ) : null}
+        {!hasGetFarcasterTokensDataError &&
+        nextState.hasBindPond &&
+        nextState.step === 1 ? (
+          <FrameButton
+            action="link"
+            target={
+              "https://cryptopond.xyz/token_discovery/detail/" +
+              farcasterTokensData[2]?.address
+            }
+          >
+            {(tokenDetailData3.tokenName || "").length > 10
+              ? tokenDetailData3.tokenSymbol
+              : tokenDetailData3.tokenName}
+          </FrameButton>
+        ) : null}
+        {!hasGetFarcasterTokensDataError &&
+        !nextState.hasBindPond &&
+        nextState.step === 1 ? (
+          <FrameButton action="link" target={"https://cryptopond.xyz"}>
+            register Pond
           </FrameButton>
         ) : null}
       </FrameContainer>
